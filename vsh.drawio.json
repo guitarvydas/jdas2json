@@ -17,7 +17,7 @@
     ],
     "connections": [
       {
-        "dir": "Down",
+        "dir": 2,
         "source_port": "",
         "target_port": "",
         "target": {
@@ -26,7 +26,7 @@
         }
       },
       {
-        "dir": "Across",
+        "dir": 1,
         "source_port": "",
         "target_port": "",
         "source": {
@@ -39,7 +39,7 @@
         }
       },
       {
-        "dir": "Across",
+        "dir": 1,
         "source_port": "",
         "target_port": "",
         "source": {
@@ -52,7 +52,7 @@
         }
       },
       {
-        "dir": "Up",
+        "dir": 0,
         "source_port": "",
         "target_port": "processes",
         "source": {
@@ -61,7 +61,7 @@
         }
       },
       {
-        "dir": "Up",
+        "dir": 0,
         "source_port": "",
         "target_port": "ps",
         "source": {

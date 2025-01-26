@@ -553,3 +553,27 @@ Try running again. The issue was that childNodes in xmldom doesn't support the i
 
 ---
 
+convert directions to numbers
+
+---
+[the code for das2json.js is now: ...code...]
+
+Looking at the code, I spot potential issues that need to be fixed:
+
+1. Missing some attributes in Cell.fromElement() - they appear in the original Odin code but are not handled here
+2. File existence check in parseCommandLineArgs() is incorrect (await missing)
+3. lint_connections() has a logic error in parent_rect check for Down decls
+
+Let me fix these:
+
+Key changes:
+1. Added shape=rhombus style handling
+2. Fixed Down decls parent check logic
+3. Made parseCommandLineArgs async with proper await on fs.access
+4. Added await to parseCommandLineArgs call in main()
+
+---
+
+the second "file": "vsh.drawio" appears in the wrong place
+
+---

@@ -1,17 +1,12 @@
+// File: jdas2json.js
 import fs from 'fs/promises';
 import { DOMParser } from '@xmldom/xmldom';
 import path from 'path';
 
-const Direction = {
-    Up: 0,
-    Across: 1,
-    Down: 2,
-    Through: 3
-};
-
+// Constants and Enums remain the same...
 const CellType = {
     Rhombus: 0,
-    Rect: 1,
+    Rect: 1, 
     Ellipse: 2,
     Arrow: 3
 };
@@ -31,6 +26,7 @@ const REPLACEMENTS = [
     ['&#039;', '\\']
 ];
 
+// Utility functions remain mostly the same...
 function htmlUnescape(s) {
     let result = '';
     let remaining = s;
@@ -63,6 +59,7 @@ function htmlUnescape(s) {
     return result + remaining;
 }
 
+// Classes remain mostly the same...
 class Cell {
     constructor() {
         this.mxgraphId = '';
@@ -89,16 +86,10 @@ class Cell {
                     case 'ellipse': cell.type = CellType.Ellipse; break;
                     case 'rhombus': cell.type = CellType.Rhombus; break;
                     case 'container': cell.flags.add(FlagValue.Container); break;
-                    case 'shape': 
-                        if (style.includes('rhombus')) {
-                            cell.type = CellType.Rhombus;
-                        }
-                        break;
                 }
             }
         }
 
-        // Process mxCell attributes
         for (let i = 0; i < elem.attributes.length; i++) {
             const attr = elem.attributes[i];
             const value = attr.value;
@@ -180,6 +171,7 @@ class Page {
     }
 }
 
+// Collection functions remain the same...
 function collectChildren(cells) {
     return cells
         .filter(cell => cell.type === CellType.Rect && cell.flags.has(FlagValue.Container))
@@ -191,7 +183,7 @@ function collectUpDecls(cells, decls) {
         if (cell.type !== CellType.Arrow) continue;
 
         const decl = {
-            dir: Direction.Up,
+            dir: 'Up',
             source_port: '',
             target_port: '',
             source: null
@@ -219,7 +211,7 @@ function collectAcrossDecls(cells, decls) {
         if (cell.type !== CellType.Arrow) continue;
 
         const decl = {
-            dir: Direction.Across,
+            dir: 'Across',
             source_port: '',
             target_port: '',
             source: null,
@@ -244,6 +236,7 @@ function collectAcrossDecls(cells, decls) {
 
         decl.source = { value: sourceRect.value, id: sourceRect.id };
         decl.target = { value: targetRect.value, id: targetRect.id };
+
         decls.push(decl);
     }
 }
@@ -253,7 +246,7 @@ function collectDownDecls(cells, decls) {
         if (cell.type !== CellType.Arrow) continue;
 
         const decl = {
-            dir: Direction.Down,
+            dir: 'Down',
             source_port: '',
             target_port: '',
             target: null
@@ -269,7 +262,7 @@ function collectDownDecls(cells, decls) {
         decl.target_port = targetCell.value;
 
         const parentRect = cells[targetCell.parent];
-        if (parentRect.type !== CellType.Rect || !parentRect.flags.has(FlagValue.Container)) {
+        if (!(parentRect.type === CellType.Rect && parentRect.flags.has(FlagValue.Container))) {
             continue;
         }
 
@@ -288,7 +281,7 @@ function collectThroughDecls(cells, decls) {
         if (targetRhombus.type !== CellType.Rhombus) continue;
 
         decls.push({
-            dir: Direction.Through,
+            dir: 'Through',
             source_port: sourceRhombus.value,
             target_port: targetRhombus.value
         });
@@ -322,6 +315,7 @@ function lintConnections(name, cells) {
     }
 }
 
+// Main conversion function
 async function drawio2json(containerXml) {
     try {
         const xmlContent = await fs.readFile(containerXml, 'utf8');
@@ -372,12 +366,10 @@ function containerDeclFromPage(page) {
     return decl;
 }
 
-async function parseCommandLineArgs() {
+function parseCommandLineArgs() {
     const diagramSourceFile = process.argv[2] || '<?>';
 
-    try {
-        await fs.access(diagramSourceFile);
-    } catch {
+    if (!diagramSourceFile || !fs.access(diagramSourceFile).catch(() => false)) {
         console.error('Source diagram file', diagramSourceFile, 'does not exist.');
         process.exit(1);
     }
@@ -385,8 +377,9 @@ async function parseCommandLineArgs() {
     return diagramSourceFile;
 }
 
+// Main entry point
 async function main() {
-    const diagramName = await parseCommandLineArgs();
+    const diagramName = parseCommandLineArgs();
     try {
         const fname = await drawio2json(diagramName);
         console.log('Created:', fname);
@@ -396,4 +389,5 @@ async function main() {
     }
 }
 
+// Run the program
 main();
