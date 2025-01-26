@@ -1,4 +1,35 @@
 Convert the following Odin code to a single Javascript program.
+--- ../../ir/ir_odin --
+package ir_odin
+
+Container_Decl :: struct {
+    file:        string,
+    name:        string,
+    children:    []Elem_Reference,
+    connections: []Connect_Decl,
+}
+
+Connect_Decl :: struct {
+    dir:         Direction,
+    source:      Elem_Reference,
+    source_port: string,
+    target:      Elem_Reference,
+    target_port: string,
+}
+
+Direction :: enum {
+    Down, // 0 (guaranteed by Odin language)
+    Across, // 1
+    Up, // 2
+    Through, // 3
+}
+
+Elem_Reference :: struct {
+    name: string,
+    id:   int,
+}
+
+
 --- main.odin ---
 /*
 
@@ -577,3 +608,38 @@ Key changes:
 the second "file": "vsh.drawio" appears in the wrong place
 
 ---
+
+"value" should be "name" in children objects, source object and target objects
+
+---
+I forgot to provde ../../ir/ir_odin, which defined down as 0 and up as 2
+--- ../../ir/ir_odin --
+package ir_odin
+
+Container_Decl :: struct {
+    file:        string,
+    name:        string,
+    children:    []Elem_Reference,
+    connections: []Connect_Decl,
+}
+
+Connect_Decl :: struct {
+    dir:         Direction,
+    source:      Elem_Reference,
+    source_port: string,
+    target:      Elem_Reference,
+    target_port: string,
+}
+
+Direction :: enum {
+    Down, // 0 (guaranteed by Odin language)
+    Across, // 1
+    Up, // 2
+    Through, // 3
+}
+
+Elem_Reference :: struct {
+    name: string,
+    id:   int,
+}
+

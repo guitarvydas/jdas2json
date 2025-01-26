@@ -3,9 +3,9 @@ import { DOMParser } from '@xmldom/xmldom';
 import path from 'path';
 
 const Direction = {
-    Down: 0,
+    Up: 0,
     Across: 1,
-    Up: 2,
+    Down: 2,
     Through: 3
 };
 
@@ -183,7 +183,7 @@ class Page {
 function collectChildren(cells) {
     return cells
         .filter(cell => cell.type === CellType.Rect && cell.flags.has(FlagValue.Container))
-        .map(cell => ({ name: cell.value, id: cell.id }));
+        .map(cell => ({ value: cell.value, id: cell.id }));
 }
 
 function collectUpDecls(cells, decls) {
@@ -209,7 +209,7 @@ function collectUpDecls(cells, decls) {
             continue;
         }
 
-        decl.source = { name: parentRect.value, id: parentRect.id };
+        decl.source = { value: parentRect.value, id: parentRect.id };
         decls.push(decl);
     }
 }
@@ -242,8 +242,8 @@ function collectAcrossDecls(cells, decls) {
             continue;
         }
 
-        decl.source = { name: sourceRect.value, id: sourceRect.id };
-        decl.target = { name: targetRect.value, id: targetRect.id };
+        decl.source = { value: sourceRect.value, id: sourceRect.id };
+        decl.target = { value: targetRect.value, id: targetRect.id };
         decls.push(decl);
     }
 }
@@ -273,7 +273,7 @@ function collectDownDecls(cells, decls) {
             continue;
         }
 
-        decl.target = { name: parentRect.value, id: parentRect.id };
+        decl.target = { value: parentRect.value, id: parentRect.id };
         decls.push(decl);
     }
 }

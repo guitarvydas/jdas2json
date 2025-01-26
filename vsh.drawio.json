@@ -3,25 +3,25 @@
     "name": "main",
     "children": [
       {
-        "value": "$ ps",
+        "name": "$ ps",
         "id": 5
       },
       {
-        "value": "$ grep vsh",
+        "name": "$ grep vsh",
         "id": 8
       },
       {
-        "value": "$ wc -l",
+        "name": "$ wc -l",
         "id": 11
       }
     ],
     "connections": [
       {
-        "dir": 2,
+        "dir": 0,
         "source_port": "",
         "target_port": "",
         "target": {
-          "value": "$ ps",
+          "name": "$ ps",
           "id": 5
         }
       },
@@ -30,11 +30,11 @@
         "source_port": "",
         "target_port": "",
         "source": {
-          "value": "$ ps",
+          "name": "$ ps",
           "id": 5
         },
         "target": {
-          "value": "$ grep vsh",
+          "name": "$ grep vsh",
           "id": 8
         }
       },
@@ -43,29 +43,29 @@
         "source_port": "",
         "target_port": "",
         "source": {
-          "value": "$ ps",
+          "name": "$ ps",
           "id": 5
         },
         "target": {
-          "value": "$ wc -l",
+          "name": "$ wc -l",
           "id": 11
         }
       },
       {
-        "dir": 0,
+        "dir": 2,
         "source_port": "",
         "target_port": "processes",
         "source": {
-          "value": "$ wc -l",
+          "name": "$ wc -l",
           "id": 11
         }
       },
       {
-        "dir": 0,
+        "dir": 2,
         "source_port": "",
         "target_port": "ps",
         "source": {
-          "value": "$ grep vsh",
+          "name": "$ grep vsh",
           "id": 8
         }
       }
