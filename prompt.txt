@@ -1,0 +1,555 @@
+Convert the following Odin code to a single Javascript program.
+--- main.odin ---
+/*
+
+This example demonstrates taking a `.drawio` file and compiling
+it to JSON
+
+*/
+package das2json
+
+import "core:fmt"
+import "core:os"
+import "core:encoding/json" 
+import "core:path/filepath"
+import "core:slice"
+
+import "syntax"
+
+
+main :: proc() {
+    diagram_name, main_container_name := parse_command_line_args ()
+    fname := drawio2json (diagram_name)
+}
+
+
+drawio2json :: proc (container_xml : string) -> string {
+
+    decls, err := syntax.parse_drawio_mxgraph(container_xml)
+    assert(err == .None, "Failed parsing container XML")
+    diagram_json, _ := json.marshal(decls, {pretty=true, use_spaces=true})
+    nwritten : int
+    sjson := string (diagram_json)
+    mode: int = 0
+    fname := fmt.aprintf ("%v.json", filepath.base (container_xml))
+    when os.OS == .Linux || os.OS == .Darwin {
+	// NOTE(justasd): 644 (owner read, write; group read; others read)
+	mode = os.S_IRUSR | os.S_IWUSR | os.S_IRGRP | os.S_IROTH
+    }
+    fd, open_errnum := os.open (path = fname, flags =  os.O_WRONLY|os.O_CREATE|os.O_TRUNC, mode = mode)
+    if open_errnum == 0 {
+	numchars, write_errnum := os.write (fd, transmute([]u8)sjson)
+	if write_errnum != 0 {
+	    fmt.eprintf ("write failure %v\n", os.get_last_error ())
+	}
+    }
+    os.close (fd)
+    return fname
+}
+
+parse_command_line_args :: proc () -> (diagram_source_file, main_container_name: string) {
+    diagram_source_file = slice.get(os.args, 1) or_else "<?>"
+    main_container_name = slice.get(os.args, 2) or_else "main"
+    
+    if !os.exists(diagram_source_file) {
+        fmt.println("Source diagram file", diagram_source_file, "does not exist.")
+        os.exit(1)
+    }
+    return diagram_source_file, main_container_name
+}
+--- syntax/decls.odin ---
+package syntax
+
+import ir "../../ir/ir_odin"
+import "core:fmt"
+
+// Collects all declarations on the passed page, using the semantics outlined below.
+container_decl_from_page :: proc(page: Page) -> ir.Container_Decl {
+    decl: ir.Container_Decl
+    decl.name = page.name
+
+    decl.children = collect_children(page.cells)
+
+    lint_connections (page.name, page.cells)
+
+    connections := make([dynamic]ir.Connect_Decl)
+    collect_down_decls(page.cells, &connections)
+    collect_across_decls(page.cells, &connections)
+    collect_up_decls(page.cells, &connections)
+    collect_through_decls(page.cells, &connections)
+    decl.connections = connections[:]
+
+    return decl
+}
+
+// Semantics for detecting container children:
+//
+// All elements that are rects, and marked as a container.
+collect_children :: proc(cells: []Cell) -> []ir.Elem_Reference {
+    children := make([dynamic]ir.Elem_Reference)
+
+    for cell in cells {
+        if cell.type == .Rect && .Container in cell.flags {
+            ref := ir.Elem_Reference{cell.value, cell.id}
+            append(&children, ref)
+        }
+    }
+
+    return children[:]
+}
+
+// Semantics for detecting "Up" decls.
+//
+// An element with a parent, connected to a rhombus (arrow towards the rhombus)
+// Where a "parent" is a "rect marked as a container"
+collect_up_decls :: proc(cells: []Cell, decls: ^[dynamic]ir.Connect_Decl) {
+    for cell in cells {
+        if cell.type != .Arrow do continue
+
+        decl: ir.Connect_Decl
+        decl.dir = .Up
+
+        target_rhombus := cells[cell.target]
+        if target_rhombus.type != .Rhombus do continue
+
+        // NOTE(z64): right now, i allow this to be any shape... might be ok?
+        source_cell := cells[cell.source]
+
+        decl.source_port = source_cell.value
+        decl.target_port = target_rhombus.value
+
+        parent_rect := cells[source_cell.parent]
+        if !(parent_rect.type == .Rect && .Container in parent_rect.flags) {
+            continue
+        }
+
+        decl.source = {parent_rect.value, parent_rect.id}
+
+        append(decls, decl)
+    }
+}
+
+// Semantics for detecting "Across" decls:
+//
+// An element with a parent connected to another element with a parent
+// Where a "parent" is a "rect marked as a container"
+collect_across_decls :: proc(cells: []Cell, decls: ^[dynamic]ir.Connect_Decl) {
+    for cell in cells {
+        if cell.type != .Arrow do continue
+
+        decl: ir.Connect_Decl
+        decl.dir = .Across
+
+        source_port := cells[cell.source]
+        target_port := cells[cell.target]
+
+        decl.source_port = source_port.value
+        decl.target_port = target_port.value
+
+        source_rect := cells[source_port.parent]
+        target_rect := cells[target_port.parent]
+        if !(source_rect.type == .Rect && .Container in source_rect.flags) {
+            continue
+        }
+        if !(target_rect.type == .Rect && .Container in target_rect.flags) {
+            continue
+        }
+
+        decl.source = {source_rect.value, source_rect.id}
+        decl.target = {target_rect.value, target_rect.id}
+
+        append(decls, decl)
+    }
+}
+
+// Semantics for detecting "Down" decls:
+//
+// Rhombus connected to an element that has a parent (arrow away from the rhombus)
+// Where a "parent" is a "rect marked as a container"
+collect_down_decls :: proc(cells: []Cell, decls: ^[dynamic]ir.Connect_Decl) {
+    for cell in cells {
+        if cell.type != .Arrow do continue
+
+        decl: ir.Connect_Decl
+        decl.dir = .Down
+
+        source_rhombus := cells[cell.source]
+        if source_rhombus.type != .Rhombus do continue
+
+        target_cell := cells[cell.target]
+        if target_cell.type != .Rect do continue
+
+        decl.source_port = source_rhombus.value
+        decl.target_port = target_cell.value
+
+        parent_rect := cells[target_cell.parent]
+        if parent_rect.type != .Rect && .Container in parent_rect.flags {
+            continue
+        }
+
+        decl.target = {parent_rect.value, parent_rect.id}
+
+        append(decls, decl)
+    }
+}
+
+// Semantics for detecting "Through" decls:
+//
+// Two rhombuses connected by an arrow.
+collect_through_decls :: proc(cells: []Cell, decls: ^[dynamic]ir.Connect_Decl) {
+    for cell in cells {
+        if cell.type != .Arrow do continue
+
+        decl: ir.Connect_Decl
+        decl.dir = .Through
+
+        source_rhombus := cells[cell.source]
+        target_rhombus := cells[cell.target]
+        if source_rhombus.type != .Rhombus do continue
+        if target_rhombus.type != .Rhombus do continue
+
+        decl.source_port = source_rhombus.value
+        decl.target_port = target_rhombus.value
+
+        append(decls, decl)
+    }
+}
+
+lint_connections :: proc(name : string, cells: []Cell) {
+    ok := true
+    
+    // drawio always makes 2 elements at the top
+    // find their ids in the cells array
+    drawio_top_idx : int
+    for cell in cells {
+	if cell.parent == 0 {
+	    drawio_top_idx = cell.id
+	}
+    }
+    drawio_second_idx : int
+    for cell in cells {
+	if cell.parent == drawio_top_idx {
+	    drawio_second_idx = cell.id
+	}
+    }
+    for cell in cells {
+        if cell.type != .Arrow do continue
+
+        source_port := cells[cell.source]
+        target_port := cells[cell.target]
+
+	if ( (source_port.type == .Rhombus && source_port.parent == drawio_top_idx) )	    || ( (source_port.type == .Rect) && ((source_port.parent == drawio_top_idx ) ||  ( source_port.parent == drawio_second_idx )) )	    || ( (target_port.type == .Rhombus && target_port.parent == drawio_top_idx) )	    || ( (target_port.type == .Rect) && ((target_port.parent == drawio_top_idx ) || ( target_port.parent == drawio_second_idx )) ) {
+	    fmt.eprintf ("suspicious (in %v) cell %v->%v in connection (port not contained by container?)\n",
+			 name, source_port.value, target_port.value)
+		ok = false
+	    }
+    }
+    fmt.assertf (ok, "quit: suspicious drawing")
+}
+--- syntax/drawio_mxgraph.odin ---
+package syntax
+
+/*
+
+Routines for taking a draw.io mxgraph XML file and loading them into Page data.
+Right now, this is the only supported format. mxGraphs from other drawing
+applications may or may not work.
+
+Eventually this API could be normalized to support different sources that can
+be coerced into the Page data structure.
+
+*/
+
+import "core:encoding/xml"
+import "core:strings"
+import "core:slice"
+import "core:testing"
+import "core:fmt"
+
+Page :: struct {
+    name:  string,
+    cells: []Cell,
+}
+
+Cell :: struct {
+    // raw mxgraph values from the document
+    mxgraph_id:     string,
+    mxgraph_source: string,
+    mxgraph_target: string,
+    mxgraph_parent: string,
+    value:          string,
+    // resolved references as indexes into the `page.cells` slice
+    id:             int,
+    source:         int,
+    target:         int,
+    parent:         int,
+    // detected properties that are useful for making syntaxes
+    flags:          Flag_Set,
+    type:           Cell_Type,
+}
+
+// Various shapes and element types that are detected.
+// The order of this enum is used for sorting `page.cells` later.
+Cell_Type :: enum {
+    Rhombus,
+    Rect,
+    Ellipse,
+    Arrow,
+}
+
+// Flags detected from attributes and styles on the element.
+Flag_Value :: enum {
+    Vertex,
+    Edge,
+    Container,
+}
+
+Flag_Set :: bit_set[Flag_Value]
+
+page_from_elem :: proc(doc: ^xml.Document, elem: xml.Element) -> (page: Page) {
+    // find name
+    parent0 := doc.elements[elem.parent]
+    parent1 := doc.elements[parent0.parent]
+    assert(parent1.ident == "diagram", "Unexpected XML layout (root diagram name)")
+    for attr in parent1.attribs {
+        if attr.key == "name" {
+            page.name = attr.val
+            break
+        }
+    }
+    assert(page.name != "", "Page without name")
+
+    // find children
+    page.cells = make([]Cell, len(elem.value))
+    for value, idx in elem.value {
+        child_id := value.(xml.Element_ID)
+        elem := doc.elements[child_id]
+        switch elem.ident {
+        case "mxCell":
+            page.cells[idx] = cell_from_elem(doc, elem, nil)
+        case "UserObject":
+            if len(elem.value) > 0 {
+                mxcell_child := doc.elements[elem.value[0].(xml.Element_ID)]
+                assert(mxcell_child.ident == "mxCell", "Unexpected XML layout (UserObject child is not mxCell)")
+                page.cells[idx] = cell_from_elem(doc, mxcell_child, elem)
+            }
+        case:
+            panic("Unexpected XML layout (root children)")
+        }
+    }
+
+    // sort & assign IDs
+    slice.sort_by(page.cells, proc(i, j: Cell) -> bool {
+        return i.type < j.type
+    })
+    for cell, idx in &page.cells {
+        cell.id = idx
+    }
+
+    // connect source/target references etc.
+    for cell in &page.cells {
+        for x in page.cells {
+            if cell.mxgraph_source == x.mxgraph_id {
+                cell.source = x.id
+            }
+            if cell.mxgraph_target == x.mxgraph_id {
+                cell.target = x.id
+            }
+            if cell.mxgraph_parent == x.mxgraph_id {
+                cell.parent = x.id
+            }
+        }
+    }
+
+    return page
+}
+
+cell_from_elem :: proc(doc: ^xml.Document, elem: xml.Element, user_object_parent: Maybe(xml.Element)) -> Cell {
+    style_kv :: proc(s: string) -> (k, v: string) {
+        idx := strings.index(s, "=")
+        if idx == -1 {
+            k = s
+        } else {
+            k = s[:idx]
+            v = s[idx+1:]
+        }
+        return k, v
+    }
+
+    cell: Cell
+    cell.type = .Rect
+
+    for attrib in elem.attribs {
+        switch attrib.key {
+        case "id":     cell.mxgraph_id = attrib.val
+        case "source": cell.mxgraph_source = attrib.val
+        case "target": cell.mxgraph_target = attrib.val
+        case "parent": cell.mxgraph_parent = attrib.val
+        case "value":  cell.value = html_unescape(attrib.val)
+        case "vertex": cell.flags += {.Vertex}
+        case "edge":
+	    cell.flags += {.Edge}
+            cell.type = .Arrow
+        case "style":
+            iter := attrib.val
+            for kv in strings.split_iterator(&iter, ";") {
+                k, _ := style_kv(kv)
+                switch k {
+                case "ellipse": cell.type = .Ellipse
+                case "rhombus": cell.type = .Rhombus
+                case "container":  cell.flags += {.Container}
+                }
+            }
+        }
+    }
+
+    if parent, ok := user_object_parent.?; ok {
+        for attrib in parent.attribs {
+            switch attrib.key {
+            case "id":    cell.mxgraph_id = attrib.val
+            case "label": cell.value = attrib.val
+            }
+        }
+    }
+    if (cell.type == .Arrow && cell.mxgraph_source == "") {
+      fmt.println ("\n###        arrow has no source")
+      fmt.println (cell)
+    } else if (cell.type == .Arrow && cell.mxgraph_target == "") {
+      fmt.println ("\n###        arrow has no target")
+      fmt.println (cell)
+    }
+    return cell
+}
+
+// NOTE(z64): This is a best-minimal-effort implementation of unescaping :)
+// If you find any other encoded stuff, please feel free to add them to `REPLACEMENTS`.
+//
+// This currently always makes a new string.
+html_unescape :: proc(s: string) -> string {
+    REPLACEMENTS :: [][2]string {
+        {"&lt;", "<"},
+        {"&gt;", ">"},
+        {"&amp;", "&"},
+        {"&quot;", "\""},
+        {"&#39;", "'"},
+        {"&#039;", "\\"},
+    }
+
+    b := strings.builder_make()
+    s := s
+
+    scan_loop: for {
+        start := strings.index_rune(s, '&')
+        if start == -1 {
+            break scan_loop
+        }
+
+        end := strings.index_rune(s[start:], ';')
+        if end == -1 {
+            break scan_loop
+        }
+
+        substr := s[start:start+end+1]
+        replace_loop: for row in REPLACEMENTS {
+            if row[0] == substr {
+                strings.write_string(&b, s[:start])
+                strings.write_string(&b, row[1])
+                s = s[start+end+1:]
+                continue scan_loop
+            }
+        }
+
+        // no replacement found
+        strings.write_string(&b, s[:end+1])
+        s = s[end+1:]
+    }
+
+    if len(s) > 0 {
+        strings.write_string(&b, s)
+    }
+    return strings.to_string(b)
+}
+
+@(test)
+test_html_unescape :: proc(x: ^testing.T) {
+    s := "$ cat &gt;&gt; fortunes.txt"
+    e := html_unescape(s)
+    testing.expect_value(x, e, "$ cat >> fortunes.txt")
+}
+
+--- syntax/syntax.odin ---
+/*
+
+This package contains utilities for taking files and data and parsing them
+into 0d declarations, as decribed in `decls.odin`, that should be able to
+be used by any 0d runtime or compiler.
+
+Right now, the only supported input format is uncompressed draw.io mxGraph
+diagrams. Eventually support could be added for other formats, XML, JSON, ...
+
+*/
+package syntax
+
+import "core:os"
+import "core:encoding/xml"
+import ir "../../ir/ir_odin"
+
+Error :: enum {
+    None,
+    FileRead,
+    XML,
+}
+
+parse_drawio_mxgraph :: proc(path: string) -> (decls: []ir.Container_Decl, err: Error) {
+    file, file_ok := os.read_entire_file(path)
+    if !file_ok {
+        return {}, .FileRead
+    }
+
+    xml, xml_err := xml.parse(file)
+    if xml_err != .None {
+        return {}, .XML
+    }
+
+    decl_array := make([dynamic]ir.Container_Decl)
+
+    for elem in xml.elements {
+        if elem.ident == "root" {
+            page := page_from_elem(xml, elem)
+            decl := container_decl_from_page(page)
+            decl.file = path
+            append(&decl_array, decl)
+        }
+    }
+
+    return decl_array[:], .None
+}
+
+--- --- ---
+
+The code has been converted to a single JavaScript program with equivalent functionality. Key changes include:
+
+1. Classes for Cell and Page instead of structs
+2. Async/await for file operations 
+3. DOM parsing instead of custom XML parsing
+4. Browser-compatible file operations
+5. JavaScript-style enums and sets
+6. URL parameters instead of command line args
+
+You can use this by importing the functions and calling them from your JavaScript code.
+
+---
+Let me update the code to work as a Node.js script:
+
+You'll need to:
+1. Install xmldom: `npm install @xmldom/xmldom`
+2. Add `{ "type": "module" }` to package.json
+3. Run with: `node jdas2json.js input.drawio`
+---
+
+The issue is with handling childNodes. Let me fix the iteration:
+
+Try running again. The issue was that childNodes in xmldom doesn't support the iteration protocol.
+
+---
+

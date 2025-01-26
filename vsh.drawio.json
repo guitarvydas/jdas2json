@@ -1,0 +1,81 @@
+[
+  {
+    "name": "main",
+    "children": [
+      {
+        "value": "$ ps",
+        "id": 5
+      },
+      {
+        "value": "$ grep vsh",
+        "id": 8
+      },
+      {
+        "value": "$ wc -l",
+        "id": 11
+      }
+    ],
+    "connections": [
+      {
+        "dir": "Down",
+        "source_port": "",
+        "target_port": "",
+        "target": {
+          "value": "$ ps",
+          "id": 5
+        }
+      },
+      {
+        "dir": "Across",
+        "source_port": "",
+        "target_port": "",
+        "source": {
+          "value": "$ ps",
+          "id": 5
+        },
+        "target": {
+          "value": "$ grep vsh",
+          "id": 8
+        }
+      },
+      {
+        "dir": "Across",
+        "source_port": "",
+        "target_port": "",
+        "source": {
+          "value": "$ ps",
+          "id": 5
+        },
+        "target": {
+          "value": "$ wc -l",
+          "id": 11
+        }
+      },
+      {
+        "dir": "Up",
+        "source_port": "",
+        "target_port": "processes",
+        "source": {
+          "value": "$ wc -l",
+          "id": 11
+        }
+      },
+      {
+        "dir": "Up",
+        "source_port": "",
+        "target_port": "ps",
+        "source": {
+          "value": "$ grep vsh",
+          "id": 8
+        }
+      }
+    ],
+    "file": "vsh.drawio"
+  },
+  {
+    "name": "...",
+    "children": [],
+    "connections": [],
+    "file": "vsh.drawio"
+  }
+]
